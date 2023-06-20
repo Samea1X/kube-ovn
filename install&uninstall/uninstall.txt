@@ -1,0 +1,17 @@
+使用下面的脚本删除在 Kubernetes 中创建的资源
+wget https://raw.githubusercontent.com/alauda/kube-ovn/release/1.1/dist/images/cleanup.sh
+bash cleanup.sh
+
+
+在每台机器上执行下列操作，清理 ovsdb 以及 openswitch 保存的配置
+rm -rf /var/run/openvswitch
+rm -rf /var/run/ovn
+rm -rf /etc/origin/openvswitch/
+rm -rf /etc/origin/ovn/
+rm -rf /etc/cni/net.d/00-kube-ovn.conflist
+rm -rf /etc/cni/net.d/01-kube-ovn.conflist
+rm -rf /var/log/openvswitch
+rm -rf /var/log/ovn
+
+
+重启节点，以确保对应的网卡信息，iptable/ipset 规则得以清除
