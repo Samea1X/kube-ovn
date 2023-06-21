@@ -1,0 +1,3 @@
+高可用部署使用ovn-ha部署，找到NODE_IPS变量，设置为高可用的IP地址，replicate修改数量
+
+修改kube-ovn.yml，更改replicate数量

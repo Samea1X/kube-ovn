@@ -18,10 +18,8 @@ LS_DNAT_MOD_DL_DST=${LS_DNAT_MOD_DL_DST:-true}
 ENABLE_EXTERNAL_VPC=${ENABLE_EXTERNAL_VPC:-true}
 CNI_CONFIG_PRIORITY=${CNI_CONFIG_PRIORITY:-01}
 ENABLE_LB_SVC=${ENABLE_LB_SVC:-false}
-ENABLE_NAT_GW=${ENABLE_NAT_GW:-false}
 ENABLE_KEEP_VM_IP=${ENABLE_KEEP_VM_IP:-true}
-ENABLE_ARP_DETECT_IP_CONFLICT=${ENABLE_ARP_DETECT_IP_CONFLICT:-true}
-NODE_LOCAL_DNS_IP=${NODE_LOCAL_DNS_IP:-}
+
 # exchange link names of OVS bridge and the provider nic
 # in the default provider-network
 EXCHANGE_LINK_NAME=${EXCHANGE_LINK_NAME:-false}
@@ -29,21 +27,19 @@ EXCHANGE_LINK_NAME=${EXCHANGE_LINK_NAME:-false}
 # separated by comma, if empty will use the nic that the default route use
 IFACE=${IFACE:-}
 # Specifies the name of the dpdk tunnel iface.
-# Note that the dpdk tunnel iface and tunnel ip cidr should be diffierent with Kubernetes api cidr, otherwise the route will be a problem.
+# Note that the dpdk tunnel iface and tunnel ip cidr should be diffierent with Kubernetes api cidr,otherwise the route will be a problem.
 DPDK_TUNNEL_IFACE=${DPDK_TUNNEL_IFACE:-br-phy}
 ENABLE_BIND_LOCAL_IP=${ENABLE_BIND_LOCAL_IP:-true}
 
 # debug
 DEBUG_WRAPPER=${DEBUG_WRAPPER:-}
-
 KUBELET_DIR=${KUBELET_DIR:-/var/lib/kubelet}
 
 CNI_CONF_DIR="/etc/cni/net.d"
 CNI_BIN_DIR="/opt/cni/bin"
 
-REGISTRY="docker.io/kubeovn"
-VPC_NAT_IMAGE="vpc-nat-gateway"
-VERSION="v1.12.0"
+REGISTRY="kubeovn"
+VERSION="v1.11.8"
 IMAGE_PULL_POLICY="IfNotPresent"
 POD_CIDR="10.16.0.0/16"                # Do NOT overlap with NODE/SVC/JOIN CIDR
 POD_GATEWAY="10.16.0.1"
@@ -53,18 +49,18 @@ PINGER_EXTERNAL_ADDRESS="114.114.114.114"  # Pinger check external ip probe
 PINGER_EXTERNAL_DOMAIN="alauda.cn"         # Pinger check external domain probe
 SVC_YAML_IPFAMILYPOLICY=""
 if [ "$IPV6" = "true" ]; then
-  POD_CIDR="fd00:10:16::/112"                # Do NOT overlap with NODE/SVC/JOIN CIDR
+  POD_CIDR="fd00:10:16::/64"                # Do NOT overlap with NODE/SVC/JOIN CIDR
   POD_GATEWAY="fd00:10:16::1"
   SVC_CIDR="fd00:10:96::/112"               # Do NOT overlap with NODE/POD/JOIN CIDR
-  JOIN_CIDR="fd00:100:64::/112"              # Do NOT overlap with NODE/POD/SVC CIDR
+  JOIN_CIDR="fd00:100:64::/64"              # Do NOT overlap with NODE/POD/SVC CIDR
   PINGER_EXTERNAL_ADDRESS="2400:3200::1"
   PINGER_EXTERNAL_DOMAIN="google.com"
 fi
 if [ "$DUAL_STACK" = "true" ]; then
-  POD_CIDR="10.16.0.0/16,fd00:10:16::/112"                # Do NOT overlap with NODE/SVC/JOIN CIDR
+  POD_CIDR="10.16.0.0/16,fd00:10:16::/64"                # Do NOT overlap with NODE/SVC/JOIN CIDR
   POD_GATEWAY="10.16.0.1,fd00:10:16::1"
   SVC_CIDR="10.96.0.0/12,fd00:10:96::/112"               # Do NOT overlap with NODE/POD/JOIN CIDR
-  JOIN_CIDR="100.64.0.0/16,fd00:100:64::/112"             # Do NOT overlap with NODE/POD/SVC CIDR
+  JOIN_CIDR="100.64.0.0/16,fd00:100:64::/64"             # Do NOT overlap with NODE/POD/SVC CIDR
   PINGER_EXTERNAL_ADDRESS="114.114.114.114,2400:3200::1"
   PINGER_EXTERNAL_DOMAIN="google.com"
   SVC_YAML_IPFAMILYPOLICY="ipFamilyPolicy: PreferDualStack"
@@ -218,7 +214,7 @@ echo "-------------------------------"
 echo ""
 
 echo "[Step 2/6] Install OVN components"
-addresses=$(kubectl get no -lkube-ovn/role=master --no-headers -o wide | awk '{print $6}' | tr \\n ',' | sed 's/,$//')
+addresses=$(kubectl get no -lkube-ovn/role=master --no-headers -o wide | awk '{print $6}' | tr \\n ',')
 count=$(kubectl get no -lkube-ovn/role=master --no-headers | wc -l)
 echo "Install OVN DB in $addresses"
 
@@ -354,10 +350,6 @@ spec:
                   items:
                     type: string
                   type: array
-                endpoints:
-                  items:
-                    type: string
-                  type: array
             status:
               type: object
               properties:
@@ -394,317 +386,10 @@ spec:
       name: v1
       served: true
       storage: true
-      subresources:
-        status: {}
       schema:
         openAPIV3Schema:
           type: object
           properties:
-            status:
-              type: object
-              properties:
-                externalSubnets:
-                  items:
-                    type: string
-                  type: array
-                selector:
-                  type: array
-                  items:
-                    type: string
-                qosPolicy:
-                  type: string
-                tolerations:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      key:
-                        type: string
-                      operator:
-                        type: string
-                        enum:
-                          - Equal
-                          - Exists
-                      value:
-                        type: string
-                      effect:
-                        type: string
-                        enum:
-                          - NoExecute
-                          - NoSchedule
-                          - PreferNoSchedule
-                      tolerationSeconds:
-                        type: integer
-                affinity:
-                  properties:
-                    nodeAffinity:
-                      properties:
-                        preferredDuringSchedulingIgnoredDuringExecution:
-                          items:
-                            properties:
-                              preference:
-                                properties:
-                                  matchExpressions:
-                                    items:
-                                      properties:
-                                        key:
-                                          type: string
-                                        operator:
-                                          type: string
-                                        values:
-                                          items:
-                                            type: string
-                                          type: array
-                                      required:
-                                        - key
-                                        - operator
-                                      type: object
-                                    type: array
-                                  matchFields:
-                                    items:
-                                      properties:
-                                        key:
-                                          type: string
-                                        operator:
-                                          type: string
-                                        values:
-                                          items:
-                                            type: string
-                                          type: array
-                                      required:
-                                        - key
-                                        - operator
-                                      type: object
-                                    type: array
-                                type: object
-                              weight:
-                                format: int32
-                                type: integer
-                            required:
-                              - preference
-                              - weight
-                            type: object
-                          type: array
-                        requiredDuringSchedulingIgnoredDuringExecution:
-                          properties:
-                            nodeSelectorTerms:
-                              items:
-                                properties:
-                                  matchExpressions:
-                                    items:
-                                      properties:
-                                        key:
-                                          type: string
-                                        operator:
-                                          type: string
-                                        values:
-                                          items:
-                                            type: string
-                                          type: array
-                                      required:
-                                        - key
-                                        - operator
-                                      type: object
-                                    type: array
-                                  matchFields:
-                                    items:
-                                      properties:
-                                        key:
-                                          type: string
-                                        operator:
-                                          type: string
-                                        values:
-                                          items:
-                                            type: string
-                                          type: array
-                                      required:
-                                        - key
-                                        - operator
-                                      type: object
-                                    type: array
-                                type: object
-                              type: array
-                          required:
-                            - nodeSelectorTerms
-                          type: object
-                      type: object
-                    podAffinity:
-                      properties:
-                        preferredDuringSchedulingIgnoredDuringExecution:
-                          items:
-                            properties:
-                              podAffinityTerm:
-                                properties:
-                                  labelSelector:
-                                    properties:
-                                      matchExpressions:
-                                        items:
-                                          properties:
-                                            key:
-                                              type: string
-                                              x-kubernetes-patch-strategy: merge
-                                              x-kubernetes-patch-merge-key: key
-                                            operator:
-                                              type: string
-                                            values:
-                                              items:
-                                                type: string
-                                              type: array
-                                          required:
-                                            - key
-                                            - operator
-                                          type: object
-                                        type: array
-                                      matchLabels:
-                                        additionalProperties:
-                                          type: string
-                                        type: object
-                                    type: object
-                                  namespaces:
-                                    items:
-                                      type: string
-                                    type: array
-                                  topologyKey:
-                                    type: string
-                                required:
-                                  - topologyKey
-                                type: object
-                              weight:
-                                format: int32
-                                type: integer
-                            required:
-                              - podAffinityTerm
-                              - weight
-                            type: object
-                          type: array
-                        requiredDuringSchedulingIgnoredDuringExecution:
-                          items:
-                            properties:
-                              labelSelector:
-                                properties:
-                                  matchExpressions:
-                                    items:
-                                      properties:
-                                        key:
-                                          type: string
-                                          x-kubernetes-patch-strategy: merge
-                                          x-kubernetes-patch-merge-key: key
-                                        operator:
-                                          type: string
-                                        values:
-                                          items:
-                                            type: string
-                                          type: array
-                                      required:
-                                        - key
-                                        - operator
-                                      type: object
-                                    type: array
-                                  matchLabels:
-                                    additionalProperties:
-                                      type: string
-                                    type: object
-                                type: object
-                              namespaces:
-                                items:
-                                  type: string
-                                type: array
-                              topologyKey:
-                                type: string
-                            required:
-                              - topologyKey
-                            type: object
-                          type: array
-                      type: object
-                    podAntiAffinity:
-                      properties:
-                        preferredDuringSchedulingIgnoredDuringExecution:
-                          items:
-                            properties:
-                              podAffinityTerm:
-                                properties:
-                                  labelSelector:
-                                    properties:
-                                      matchExpressions:
-                                        items:
-                                          properties:
-                                            key:
-                                              type: string
-                                              x-kubernetes-patch-strategy: merge
-                                              x-kubernetes-patch-merge-key: key
-                                            operator:
-                                              type: string
-                                            values:
-                                              items:
-                                                type: string
-                                              type: array
-                                          required:
-                                            - key
-                                            - operator
-                                          type: object
-                                        type: array
-                                      matchLabels:
-                                        additionalProperties:
-                                          type: string
-                                        type: object
-                                    type: object
-                                  namespaces:
-                                    items:
-                                      type: string
-                                    type: array
-                                  topologyKey:
-                                    type: string
-                                required:
-                                  - topologyKey
-                                type: object
-                              weight:
-                                format: int32
-                                type: integer
-                            required:
-                              - podAffinityTerm
-                              - weight
-                            type: object
-                          type: array
-                        requiredDuringSchedulingIgnoredDuringExecution:
-                          items:
-                            properties:
-                              labelSelector:
-                                properties:
-                                  matchExpressions:
-                                    items:
-                                      properties:
-                                        key:
-                                          type: string
-                                          x-kubernetes-patch-strategy: merge
-                                          x-kubernetes-patch-merge-key: key
-                                        operator:
-                                          type: string
-                                        values:
-                                          items:
-                                            type: string
-                                          type: array
-                                      required:
-                                        - key
-                                        - operator
-                                      type: object
-                                    type: array
-                                  matchLabels:
-                                    additionalProperties:
-                                      type: string
-                                    type: object
-                                type: object
-                              namespaces:
-                                items:
-                                  type: string
-                                type: array
-                              topologyKey:
-                                type: string
-                            required:
-                              - topologyKey
-                            type: object
-                          type: array
-                      type: object
-                  type: object
             spec:
               type: object
               properties:
@@ -712,18 +397,12 @@ spec:
                   type: string
                 subnet:
                   type: string
-                externalSubnets:
-                  items:
-                    type: string
-                  type: array
                 vpc:
                   type: string
                 selector:
                   type: array
                   items:
                     type: string
-                qosPolicy:
-                  type: string
                 tolerations:
                   type: array
                   items:
@@ -733,289 +412,12 @@ spec:
                         type: string
                       operator:
                         type: string
-                        enum:
-                          - Equal
-                          - Exists
                       value:
                         type: string
                       effect:
                         type: string
-                        enum:
-                          - NoExecute
-                          - NoSchedule
-                          - PreferNoSchedule
                       tolerationSeconds:
                         type: integer
-                affinity:
-                  properties:
-                    nodeAffinity:
-                      properties:
-                        preferredDuringSchedulingIgnoredDuringExecution:
-                          items:
-                            properties:
-                              preference:
-                                properties:
-                                  matchExpressions:
-                                    items:
-                                      properties:
-                                        key:
-                                          type: string
-                                        operator:
-                                          type: string
-                                        values:
-                                          items:
-                                            type: string
-                                          type: array
-                                      required:
-                                        - key
-                                        - operator
-                                      type: object
-                                    type: array
-                                  matchFields:
-                                    items:
-                                      properties:
-                                        key:
-                                          type: string
-                                        operator:
-                                          type: string
-                                        values:
-                                          items:
-                                            type: string
-                                          type: array
-                                      required:
-                                        - key
-                                        - operator
-                                      type: object
-                                    type: array
-                                type: object
-                              weight:
-                                format: int32
-                                type: integer
-                            required:
-                              - preference
-                              - weight
-                            type: object
-                          type: array
-                        requiredDuringSchedulingIgnoredDuringExecution:
-                          properties:
-                            nodeSelectorTerms:
-                              items:
-                                properties:
-                                  matchExpressions:
-                                    items:
-                                      properties:
-                                        key:
-                                          type: string
-                                        operator:
-                                          type: string
-                                        values:
-                                          items:
-                                            type: string
-                                          type: array
-                                      required:
-                                        - key
-                                        - operator
-                                      type: object
-                                    type: array
-                                  matchFields:
-                                    items:
-                                      properties:
-                                        key:
-                                          type: string
-                                        operator:
-                                          type: string
-                                        values:
-                                          items:
-                                            type: string
-                                          type: array
-                                      required:
-                                        - key
-                                        - operator
-                                      type: object
-                                    type: array
-                                type: object
-                              type: array
-                          required:
-                            - nodeSelectorTerms
-                          type: object
-                      type: object
-                    podAffinity:
-                      properties:
-                        preferredDuringSchedulingIgnoredDuringExecution:
-                          items:
-                            properties:
-                              podAffinityTerm:
-                                properties:
-                                  labelSelector:
-                                    properties:
-                                      matchExpressions:
-                                        items:
-                                          properties:
-                                            key:
-                                              type: string
-                                              x-kubernetes-patch-strategy: merge
-                                              x-kubernetes-patch-merge-key: key
-                                            operator:
-                                              type: string
-                                            values:
-                                              items:
-                                                type: string
-                                              type: array
-                                          required:
-                                            - key
-                                            - operator
-                                          type: object
-                                        type: array
-                                      matchLabels:
-                                        additionalProperties:
-                                          type: string
-                                        type: object
-                                    type: object
-                                  namespaces:
-                                    items:
-                                      type: string
-                                    type: array
-                                  topologyKey:
-                                    type: string
-                                required:
-                                  - topologyKey
-                                type: object
-                              weight:
-                                format: int32
-                                type: integer
-                            required:
-                              - podAffinityTerm
-                              - weight
-                            type: object
-                          type: array
-                        requiredDuringSchedulingIgnoredDuringExecution:
-                          items:
-                            properties:
-                              labelSelector:
-                                properties:
-                                  matchExpressions:
-                                    items:
-                                      properties:
-                                        key:
-                                          type: string
-                                          x-kubernetes-patch-strategy: merge
-                                          x-kubernetes-patch-merge-key: key
-                                        operator:
-                                          type: string
-                                        values:
-                                          items:
-                                            type: string
-                                          type: array
-                                      required:
-                                        - key
-                                        - operator
-                                      type: object
-                                    type: array
-                                  matchLabels:
-                                    additionalProperties:
-                                      type: string
-                                    type: object
-                                type: object
-                              namespaces:
-                                items:
-                                  type: string
-                                type: array
-                              topologyKey:
-                                type: string
-                            required:
-                              - topologyKey
-                            type: object
-                          type: array
-                      type: object
-                    podAntiAffinity:
-                      properties:
-                        preferredDuringSchedulingIgnoredDuringExecution:
-                          items:
-                            properties:
-                              podAffinityTerm:
-                                properties:
-                                  labelSelector:
-                                    properties:
-                                      matchExpressions:
-                                        items:
-                                          properties:
-                                            key:
-                                              type: string
-                                              x-kubernetes-patch-strategy: merge
-                                              x-kubernetes-patch-merge-key: key
-                                            operator:
-                                              type: string
-                                            values:
-                                              items:
-                                                type: string
-                                              type: array
-                                          required:
-                                            - key
-                                            - operator
-                                          type: object
-                                        type: array
-                                      matchLabels:
-                                        additionalProperties:
-                                          type: string
-                                        type: object
-                                    type: object
-                                  namespaces:
-                                    items:
-                                      type: string
-                                    type: array
-                                  topologyKey:
-                                    type: string
-                                required:
-                                  - topologyKey
-                                type: object
-                              weight:
-                                format: int32
-                                type: integer
-                            required:
-                              - podAffinityTerm
-                              - weight
-                            type: object
-                          type: array
-                        requiredDuringSchedulingIgnoredDuringExecution:
-                          items:
-                            properties:
-                              labelSelector:
-                                properties:
-                                  matchExpressions:
-                                    items:
-                                      properties:
-                                        key:
-                                          type: string
-                                          x-kubernetes-patch-strategy: merge
-                                          x-kubernetes-patch-merge-key: key
-                                        operator:
-                                          type: string
-                                        values:
-                                          items:
-                                            type: string
-                                          type: array
-                                      required:
-                                        - key
-                                        - operator
-                                      type: object
-                                    type: array
-                                  matchLabels:
-                                    additionalProperties:
-                                      type: string
-                                    type: object
-                                type: object
-                              namespaces:
-                                items:
-                                  type: string
-                                type: array
-                              topologyKey:
-                                type: string
-                            required:
-                              - topologyKey
-                            type: object
-                          type: array
-                      type: object
-                  type: object
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -1068,8 +470,6 @@ spec:
                   type: string
                 redo:
                   type: string
-                qosPolicy:
-                  type: string
                 conditions:
                   type: array
                   items:
@@ -1097,10 +497,6 @@ spec:
                 macAddress:
                   type: string
                 natGwDp:
-                  type: string
-                qosPolicy:
-                  type: string
-                externalSubnet:
                   type: string
 ---
 apiVersion: apiextensions.k8s.io/v1
@@ -1158,8 +554,6 @@ spec:
                 natGwDp:
                   type: string
                 redo:
-                  type: string
-                internalIp:
                   type: string
                 conditions:
                   type: array
@@ -1346,8 +740,6 @@ spec:
                   type: string
                 redo:
                   type: string
-                internalCIDR:
-                  type: string
                 conditions:
                   type: array
                   items:
@@ -1394,21 +786,15 @@ spec:
       subresources:
         status: {}
       additionalPrinterColumns:
-      - jsonPath: .status.v4Ip
-        name: V4IP
+      - jsonPath: .spec.v4ip
+        name: IP
         type: string
-      - jsonPath: .status.v6Ip
-        name: V6IP
-        type: string
-      - jsonPath: .status.macAddress
+      - jsonPath: .spec.macAddress
         name: Mac
         type: string
-      - jsonPath: .status.type
+      - jsonPath: .spec.type
         name: Type
         type: string
-      - jsonPath: .status.ready
-        name: Ready
-        type: boolean
       schema:
         openAPIV3Schema:
           type: object
@@ -1416,13 +802,7 @@ spec:
             status:
               type: object
               properties:
-                type:
-                  type: string
-                ready:
-                  type: boolean
                 v4Ip:
-                  type: string
-                v6Ip:
                   type: string
                 macAddress:
                   type: string
@@ -1450,9 +830,7 @@ spec:
                   type: string
                 type:
                   type: string
-                v4Ip:
-                  type: string
-                v6Ip:
+                v4ip:
                   type: string
                 macAddress:
                   type: string
@@ -1490,12 +868,6 @@ spec:
       - jsonPath: .status.ready
         name: Ready
         type: boolean
-      - jsonPath: .spec.ipType
-        name: IpType
-        type: string
-      - jsonPath: .spec.ipName
-        name: IpName
-        type: string
       schema:
         openAPIV3Schema:
           type: object
@@ -1534,8 +906,6 @@ spec:
               type: object
               properties:
                 ovnEip:
-                  type: string
-                ipType:
                   type: string
                 ipName:
                   type: string
@@ -1618,109 +988,6 @@ spec:
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: ovn-dnat-rules.kubeovn.io
-spec:
-  group: kubeovn.io
-  names:
-    plural: ovn-dnat-rules
-    singular: ovn-dnat-rule
-    shortNames:
-      - odnat
-    kind: OvnDnatRule
-    listKind: OvnDnatRuleList
-  scope: Cluster
-  versions:
-    - name: v1
-      served: true
-      storage: true
-      subresources:
-        status: {}
-      additionalPrinterColumns:
-        - jsonPath: .spec.ovnEip
-          name: Eip
-          type: string
-        - jsonPath: .status.protocol
-          name: Protocol
-          type: string
-        - jsonPath: .status.v4Eip
-          name: V4Eip
-          type: string
-        - jsonPath: .status.v4Ip
-          name: V4Ip
-          type: string
-        - jsonPath: .status.internalPort
-          name: InternalPort
-          type: string
-        - jsonPath: .status.externalPort
-          name: ExternalPort
-          type: string
-        - jsonPath: .spec.ipName
-          name: IpName
-          type: string
-        - jsonPath: .status.ready
-          name: Ready
-          type: boolean
-      schema:
-          openAPIV3Schema:
-            type: object
-            properties:
-              status:
-                type: object
-                properties:
-                  ready:
-                    type: boolean
-                  v4Eip:
-                    type: string
-                  v4Ip:
-                    type: string
-                  macAddress:
-                    type: string
-                  vpc:
-                    type: string
-                  externalPort:
-                    type: string
-                  internalPort:
-                    type: string
-                  protocol:
-                    type: string
-                  ipName:
-                    type: string
-                  conditions:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        type:
-                          type: string
-                        status:
-                          type: string
-                        reason:
-                          type: string
-                        message:
-                          type: string
-                        lastUpdateTime:
-                          type: string
-                        lastTransitionTime:
-                          type: string
-              spec:
-                type: object
-                properties:
-                  ovnEip:
-                    type: string
-                  ipType:
-                    type: string
-                  ipName:
-                    type: string
-                  externalPort:
-                    type: string
-                  internalPort:
-                    type: string
-                  protocol:
-                    type: string
----
-apiVersion: apiextensions.k8s.io/v1
-kind: CustomResourceDefinition
-metadata:
   name: vpcs.kubeovn.io
 spec:
   group: kubeovn.io
@@ -1728,9 +995,6 @@ spec:
     - additionalPrinterColumns:
         - jsonPath: .status.enableExternal
           name: EnableExternal
-          type: boolean
-        - jsonPath: .status.enableBfd
-          name: EnableBfd
           type: boolean
         - jsonPath: .status.standby
           name: Standby
@@ -1749,8 +1013,6 @@ spec:
               properties:
                 enableExternal:
                   type: boolean
-                enableBfd:
-                  type: boolean
                 namespaces:
                   items:
                     type: string
@@ -1763,12 +1025,6 @@ spec:
                       cidr:
                         type: string
                       nextHopIP:
-                        type: string
-                      ecmpMode:
-                        type: string
-                      bfdId:
-                        type: string
-                      routeTable:
                         type: string
                     type: object
                   type: array
@@ -1823,8 +1079,6 @@ spec:
                 standby:
                   type: boolean
                 enableExternal:
-                  type: boolean
-                enableBfd:
                   type: boolean
                 subnets:
                   items:
@@ -1953,30 +1207,30 @@ spec:
       served: true
       storage: true
       additionalPrinterColumns:
-      - name: NS
-        type: string
-        jsonPath: .spec.namespace
       - name: V4IP
         type: string
         jsonPath: .status.v4ip
+      - name: PV4IP
+        type: string
+        jsonPath: .spec.parentV4ip
       - name: Mac
         type: string
         jsonPath: .status.mac
-      - name: V6IP
-        type: string
-        jsonPath: .status.v6ip
       - name: PMac
         type: string
         jsonPath: .spec.parentMac
+      - name: V6IP
+        type: string
+        jsonPath: .status.v6ip
+      - name: PV6IP
+        type: string
+        jsonPath: .spec.parentV6ip
       - name: Subnet
         type: string
         jsonPath: .spec.subnet
       - jsonPath: .status.ready
         name: Ready
         type: boolean
-      - jsonPath: .status.type
-        name: Type
-        type: string
       schema:
         openAPIV3Schema:
           type: object
@@ -1984,8 +1238,6 @@ spec:
             status:
               type: object
               properties:
-                type:
-                  type: string
                 ready:
                   type: boolean
                 v4ip:
@@ -2023,8 +1275,6 @@ spec:
                 namespace:
                   type: string
                 subnet:
-                  type: string
-                type:
                   type: string
                 attachSubnets:
                   type: array
@@ -2123,33 +1373,6 @@ spec:
                   type: string
                 u2oInterconnectionVPC:
                   type: string
-                v4usingIPrange:
-                  type: string
-                v4availableIPrange:
-                  type: string
-                v6usingIPrange:
-                  type: string
-                v6availableIPrange:
-                  type: string
-                natOutgoingPolicyRules:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      ruleID:
-                        type: string
-                      action:
-                        type: string
-                        enum:
-                          - nat
-                          - forward
-                      match:
-                        type: object
-                        properties:
-                          srcIPs:
-                            type: string
-                          dstIPs:
-                            type: string
                 conditions:
                   type: array
                   items:
@@ -2207,6 +1430,8 @@ spec:
                 gatewayNode:
                   type: string
                 natOutgoing:
+                  type: boolean
+                u2oRouting:
                   type: boolean
                 externalEgressGateway:
                   type: string
@@ -2268,32 +1493,9 @@ spec:
                           - allow
                           - drop
                           - reject
-                natOutgoingPolicyRules:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      action:
-                        type: string
-                        enum:
-                          - nat
-                          - forward
-                      match:
-                        type: object
-                        properties:
-                          srcIPs:
-                            type: string
-                          dstIPs:
-                            type: string
                 u2oInterconnection:
                   type: boolean
                 u2oInterconnectionIP:
-                  type: string
-                enableLb:
-                  type: boolean
-                enableEcmp:
-                  type: boolean
-                routeTable:
                   type: string
   scope: Cluster
   names:
@@ -2383,6 +1585,7 @@ spec:
                   not:
                     enum:
                       - int
+                      - external
             spec:
               type: object
               properties:
@@ -2553,178 +1756,17 @@ spec:
         status: {}
   conversion:
     strategy: None
----
-apiVersion: apiextensions.k8s.io/v1
-kind: CustomResourceDefinition
-metadata:
-  name: qos-policies.kubeovn.io
-spec:
-  group: kubeovn.io
-  names:
-    plural: qos-policies
-    singular: qos-policy
-    shortNames:
-      - qos
-    kind: QoSPolicy
-    listKind: QoSPolicyList
-  scope: Cluster
-  versions:
-    - name: v1
-      served: true
-      storage: true
-      subresources:
-        status: {}
-      additionalPrinterColumns:
-      - jsonPath: .spec.shared
-        name: Shared
-        type: string
-      - jsonPath: .spec.bindingType
-        name: BindingType
-        type: string
-      schema:
-        openAPIV3Schema:
-          type: object
-          properties:
-            status:
-              type: object
-              properties:
-                shared:
-                  type: boolean
-                bindingType:
-                  type: string
-                bandwidthLimitRules:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      name:
-                        type: string
-                      interface:
-                        type: string
-                      rateMax:
-                        type: string
-                      burstMax:
-                        type: string
-                      priority:
-                        type: integer
-                      direction:
-                        type: string
-                      matchType:
-                        type: string
-                      matchValue:
-                        type: string
-                conditions:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      type:
-                        type: string
-                      status:
-                        type: string
-                      reason:
-                        type: string
-                      message:
-                        type: string
-                      lastUpdateTime:
-                        type: string
-                      lastTransitionTime:
-                        type: string
-            spec:
-              type: object
-              properties:
-                shared:
-                  type: boolean
-                bindingType:
-                  type: string
-                bandwidthLimitRules:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      name:
-                        type: string
-                      interface:
-                        type: string
-                      rateMax:
-                        type: string
-                      burstMax:
-                        type: string
-                      priority:
-                        type: integer
-                      direction:
-                        type: string
-                      matchType:
-                        type: string
-                      matchValue:
-                        type: string
-                    required:
-                      - name
-                  x-kubernetes-list-map-keys:
-                    - name
-                  x-kubernetes-list-type: map
 EOF
 
-cat <<EOF > ovn-ovs-sa.yaml
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: ovn-ovs
-  namespace: kube-system
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  annotations:
-    rbac.authorization.k8s.io/system-only: "true"
-  name: system:ovn-ovs
-rules:
-  - apiGroups:
-      - ""
-    resources:
-      - pods
-    verbs:
-      - get
-      - patch
-  - apiGroups:
-      - ""
-      - networking.k8s.io
-      - apps
-    resources:
-      - services
-      - endpoints
-    verbs:
-      - get
-  - apiGroups:
-      - apps
-    resources:
-      - controllerrevisions
-    verbs:
-      - get
-      - list
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: ovn-ovs
-roleRef:
-  name: system:ovn-ovs
-  kind: ClusterRole
-  apiGroup: rbac.authorization.k8s.io
-subjects:
-  - kind: ServiceAccount
-    name: ovn-ovs
-    namespace: kube-system
-EOF
-
-cat <<EOF > kube-ovn-sa.yaml
+if $DPDK; then
+  cat <<EOF > ovn.yaml
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: ovn
   namespace: kube-system
+
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -2739,7 +1781,6 @@ rules:
       - vpcs
       - vpcs/status
       - vpc-nat-gateways
-      - vpc-nat-gateways/status
       - subnets
       - subnets/status
       - ips
@@ -2765,14 +1806,10 @@ rules:
       - ovn-eips/status
       - ovn-fips/status
       - ovn-snat-rules/status
-      - ovn-dnat-rules
-      - ovn-dnat-rules/status
       - switch-lb-rules
       - switch-lb-rules/status
       - vpc-dnses
       - vpc-dnses/status
-      - qos-policies
-      - qos-policies/status
     verbs:
       - "*"
   - apiGroups:
@@ -2795,24 +1832,10 @@ rules:
     resources:
       - network-attachment-definitions
     verbs:
-      - get
-  - apiGroups:
-      - ""
-      - networking.k8s.io
-      - apps
-    resources:
-      - networkpolicies
-      - daemonsets
-    verbs:
+      - create
+      - delete
       - get
       - list
-      - watch
-  - apiGroups:
-      - ""
-      - apps
-    resources:
-      - services/status
-    verbs:
       - update
   - apiGroups:
       - ""
@@ -2820,9 +1843,12 @@ rules:
       - apps
       - extensions
     resources:
+      - networkpolicies
       - services
+      - services/status
       - endpoints
       - statefulsets
+      - daemonsets
       - deployments
       - deployments/scale
     verbs:
@@ -3026,7 +2052,6 @@ spec:
               name: host-log-ovn
             - mountPath: /etc/localtime
               name: localtime
-              readOnly: true
             - mountPath: /var/run/tls
               name: kube-ovn-tls
           readinessProbe:
@@ -3109,491 +2134,6 @@ spec:
           operator: Exists
       priorityClassName: system-node-critical
       serviceAccountName: ovn
-      hostNetwork: true
-      hostPID: true
-      containers:
-        - name: openvswitch
-          image: "$REGISTRY/kube-ovn-dpdk:$DPDK_VERSION-$VERSION"
-          imagePullPolicy: $IMAGE_PULL_POLICY
-          command: ["/kube-ovn/start-ovs-dpdk.sh"]
-          securityContext:
-            runAsUser: 0
-            privileged: true
-          env:
-            - name: ENABLE_SSL
-              value: "$ENABLE_SSL"
-            - name: POD_IP
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.podIP
-            - name: KUBE_NODE_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: spec.nodeName
-            - name: OVN_DB_IPS
-              value: $addresses
-          volumeMounts:
-            - mountPath: /var/run/netns
-              name: host-ns
-              mountPropagation: HostToContainer
-            - mountPath: /lib/modules
-              name: host-modules
-              readOnly: true
-            - mountPath: /var/run/openvswitch
-              name: host-run-ovs
-            - mountPath: /var/run/ovn
-              name: host-run-ovn
-            - mountPath: /sys
-              name: host-sys
-              readOnly: true
-            - mountPath: /etc/openvswitch
-              name: host-config-openvswitch
-            - mountPath: /etc/ovn
-              name: host-config-ovn
-            - mountPath: /var/log/openvswitch
-              name: host-log-ovs
-            - mountPath: /var/log/ovn
-              name: host-log-ovn
-            - mountPath: /opt/ovs-config
-              name: host-config-ovs
-            - mountPath: /dev/hugepages
-              name: hugepage
-            - mountPath: /etc/localtime
-              name: localtime
-              readOnly: true
-            - mountPath: /var/run/tls
-              name: kube-ovn-tls
-          readinessProbe:
-            exec:
-              command:
-                - bash
-                - /kube-ovn/ovs-dpdk-healthcheck.sh
-            periodSeconds: 5
-            timeoutSeconds: 45
-          livenessProbe:
-            exec:
-              command:
-                - bash
-                - /kube-ovn/ovs-dpdk-healthcheck.sh
-            initialDelaySeconds: 60
-            periodSeconds: 5
-            failureThreshold: 5
-            timeoutSeconds: 45
-          resources:
-            requests:
-              cpu: $DPDK_CPU
-              memory: $DPDK_MEMORY
-            limits:
-              cpu: $DPDK_CPU
-              memory: $DPDK_MEMORY
-              hugepages-1Gi: 1Gi
-      nodeSelector:
-        kubernetes.io/os: "linux"
-        ovn.kubernetes.io/ovs_dp_type: "kernel"
-      volumes:
-        - name: host-modules
-          hostPath:
-            path: /lib/modules
-        - name: host-run-ovs
-          hostPath:
-            path: /run/openvswitch
-        - name: host-run-ovn
-          hostPath:
-            path: /run/ovn
-        - name: host-sys
-          hostPath:
-            path: /sys
-        - name: host-ns
-          hostPath:
-            path: /var/run/netns
-        - name: host-config-openvswitch
-          hostPath:
-            path: /etc/origin/openvswitch
-        - name: host-config-ovn
-          hostPath:
-            path: /etc/origin/ovn
-        - name: host-log-ovs
-          hostPath:
-            path: /var/log/openvswitch
-        - name: host-log-ovn
-          hostPath:
-            path: /var/log/ovn
-        - name: host-config-ovs
-          hostPath:
-            path: /opt/ovs-config
-            type: DirectoryOrCreate
-        - name: hugepage
-          emptyDir:
-            medium: HugePages
-        - name: localtime
-          hostPath:
-            path: /etc/localtime
-        - name: kube-ovn-tls
-          secret:
-            optional: true
-            secretName: kube-ovn-tls
-EOF
-
-cat <<EOF > kube-ovn-cni-sa.yaml
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: kube-ovn-cni
-  namespace: kube-system
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  annotations:
-    rbac.authorization.k8s.io/system-only: "true"
-  name: system:kube-ovn-cni
-rules:
-  - apiGroups:
-      - "kubeovn.io"
-    resources:
-      - subnets
-      - provider-networks
-      - ovn-eips
-      - ovn-eips/status
-      - ips
-    verbs:
-      - get
-      - list
-      - patch
-      - update
-      - watch
-  - apiGroups:
-      - ""
-    resources:
-      - pods
-      - nodes
-      - configmaps
-    verbs:
-      - get
-      - list
-      - patch
-      - watch
-  - apiGroups:
-      - ""
-    resources:
-      - events
-    verbs:
-      - create
-      - patch
-      - update
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: kube-ovn-cni
-roleRef:
-  name: system:kube-ovn-cni
-  kind: ClusterRole
-  apiGroup: rbac.authorization.k8s.io
-subjects:
-  - kind: ServiceAccount
-    name: kube-ovn-cni
-    namespace: kube-system
-EOF
-
-cat <<EOF > kube-ovn-app-sa.yaml
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: kube-ovn-app
-  namespace: kube-system
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  annotations:
-    rbac.authorization.k8s.io/system-only: "true"
-  name: system:kube-ovn-app
-rules:
-  - apiGroups:
-      - ""
-    resources:
-      - pods
-      - nodes
-    verbs:
-      - get
-      - list
-  - apiGroups:
-      - ""
-      - networking.k8s.io
-      - apps
-    resources:
-      - daemonsets
-    verbs:
-      - get
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: kube-ovn-app
-roleRef:
-  name: system:kube-ovn-app
-  kind: ClusterRole
-  apiGroup: rbac.authorization.k8s.io
-subjects:
-  - kind: ServiceAccount
-    name: kube-ovn-app
-    namespace: kube-system
-EOF
-
-kubectl apply -f kube-ovn-crd.yaml
-kubectl apply -f ovn-ovs-sa.yaml
-kubectl apply -f kube-ovn-sa.yaml
-kubectl apply -f kube-ovn-cni-sa.yaml
-kubectl apply -f kube-ovn-app-sa.yaml
-
-cat <<EOF > ovn.yaml
----
-kind: Service
-apiVersion: v1
-metadata:
-  name: ovn-nb
-  namespace: kube-system
-spec:
-  ports:
-    - name: ovn-nb
-      protocol: TCP
-      port: 6641
-      targetPort: 6641
-  type: ClusterIP
-  ${SVC_YAML_IPFAMILYPOLICY}
-  selector:
-    app: ovn-central
-    ovn-nb-leader: "true"
-  sessionAffinity: None
-
----
-kind: Service
-apiVersion: v1
-metadata:
-  name: ovn-sb
-  namespace: kube-system
-spec:
-  ports:
-    - name: ovn-sb
-      protocol: TCP
-      port: 6642
-      targetPort: 6642
-  type: ClusterIP
-  ${SVC_YAML_IPFAMILYPOLICY}
-  selector:
-    app: ovn-central
-    ovn-sb-leader: "true"
-  sessionAffinity: None
-
----
-kind: Service
-apiVersion: v1
-metadata:
-  name: ovn-northd
-  namespace: kube-system
-spec:
-  ports:
-    - name: ovn-northd
-      protocol: TCP
-      port: 6643
-      targetPort: 6643
-  type: ClusterIP
-  ${SVC_YAML_IPFAMILYPOLICY}
-  selector:
-    app: ovn-central
-    ovn-northd-leader: "true"
-  sessionAffinity: None
----
-kind: Deployment
-apiVersion: apps/v1
-metadata:
-  name: ovn-central
-  namespace: kube-system
-  annotations:
-    kubernetes.io/description: |
-      OVN components: northd, nb and sb.
-spec:
-  replicas: $count
-  strategy:
-    rollingUpdate:
-      maxSurge: 0
-      maxUnavailable: 1
-    type: RollingUpdate
-  selector:
-    matchLabels:
-      app: ovn-central
-  template:
-    metadata:
-      labels:
-        app: ovn-central
-        component: network
-        type: infra
-    spec:
-      tolerations:
-        - effect: NoSchedule
-          operator: Exists
-        - effect: NoExecute
-          operator: Exists
-        - key: CriticalAddonsOnly
-          operator: Exists
-      affinity:
-        podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            - labelSelector:
-                matchLabels:
-                  app: ovn-central
-              topologyKey: kubernetes.io/hostname
-      priorityClassName: system-cluster-critical
-      serviceAccountName: ovn-ovs
-      hostNetwork: true
-      containers:
-        - name: ovn-central
-          image: "$REGISTRY/kube-ovn:$VERSION"
-          imagePullPolicy: $IMAGE_PULL_POLICY
-          command: ["/kube-ovn/start-db.sh"]
-          securityContext:
-            capabilities:
-              add: ["SYS_NICE"]
-          env:
-            - name: ENABLE_SSL
-              value: "$ENABLE_SSL"
-            - name: NODE_IPS
-              value: $addresses
-            - name: POD_IP
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.podIP
-            - name: POD_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
-            - name: POD_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
-            - name: POD_IPS
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.podIPs
-            - name: ENABLE_BIND_LOCAL_IP
-              value: "$ENABLE_BIND_LOCAL_IP"
-            - name: DEBUG_WRAPPER
-              value: "$DEBUG_WRAPPER"
-          resources:
-            requests:
-              cpu: 300m
-              memory: 300Mi
-            limits:
-              cpu: 3
-              memory: 4Gi
-          volumeMounts:
-            - mountPath: /var/run/openvswitch
-              name: host-run-ovs
-            - mountPath: /var/run/ovn
-              name: host-run-ovn
-            - mountPath: /sys
-              name: host-sys
-              readOnly: true
-            - mountPath: /etc/openvswitch
-              name: host-config-openvswitch
-            - mountPath: /etc/ovn
-              name: host-config-ovn
-            - mountPath: /var/log/openvswitch
-              name: host-log-ovs
-            - mountPath: /var/log/ovn
-              name: host-log-ovn
-            - mountPath: /etc/localtime
-              name: localtime
-              readOnly: true
-            - mountPath: /var/run/tls
-              name: kube-ovn-tls
-          readinessProbe:
-            exec:
-              command:
-                - bash
-                - /kube-ovn/ovn-healthcheck.sh
-            periodSeconds: 15
-            timeoutSeconds: 45
-          livenessProbe:
-            exec:
-              command:
-                - bash
-                - /kube-ovn/ovn-healthcheck.sh
-            initialDelaySeconds: 30
-            periodSeconds: 15
-            failureThreshold: 5
-            timeoutSeconds: 45
-      nodeSelector:
-        kubernetes.io/os: "linux"
-        kube-ovn/role: "master"
-      volumes:
-        - name: host-run-ovs
-          hostPath:
-            path: /run/openvswitch
-        - name: host-run-ovn
-          hostPath:
-            path: /run/ovn
-        - name: host-sys
-          hostPath:
-            path: /sys
-        - name: host-config-openvswitch
-          hostPath:
-            path: /etc/origin/openvswitch
-        - name: host-config-ovn
-          hostPath:
-            path: /etc/origin/ovn
-        - name: host-log-ovs
-          hostPath:
-            path: /var/log/openvswitch
-        - name: host-log-ovn
-          hostPath:
-            path: /var/log/ovn
-        - name: localtime
-          hostPath:
-            path: /etc/localtime
-        - name: kube-ovn-tls
-          secret:
-            optional: true
-            secretName: kube-ovn-tls
-EOF
-
-kubectl apply -f ovn.yaml
-
-if $DPDK; then
-  cat <<EOF > ovs-ovn-ds.yaml
-kind: DaemonSet
-apiVersion: apps/v1
-metadata:
-  name: ovs-ovn
-  namespace: kube-system
-  annotations:
-    kubernetes.io/description: |
-      This daemon set launches the openvswitch daemon.
-spec:
-  selector:
-    matchLabels:
-      app: ovs
-  updateStrategy:
-    type: OnDelete
-  template:
-    metadata:
-      labels:
-        app: ovs
-        component: network
-        type: infra
-    spec:
-      tolerations:
-        - effect: NoSchedule
-          operator: Exists
-        - effect: NoExecute
-          operator: Exists
-        - key: CriticalAddonsOnly
-          operator: Exists
-      priorityClassName: system-node-critical
-      serviceAccountName: ovn-ovs
       hostNetwork: true
       hostPID: true
       containers:
@@ -3724,7 +2264,345 @@ spec:
 EOF
 
 else
-  cat <<EOF > ovs-ovn-ds.yaml
+  cat <<EOF > ovn.yaml
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ovn
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  annotations:
+    rbac.authorization.k8s.io/system-only: "true"
+  name: system:ovn
+rules:
+  - apiGroups:
+      - "kubeovn.io"
+    resources:
+      - vpcs
+      - vpcs/status
+      - vpc-nat-gateways
+      - subnets
+      - subnets/status
+      - ips
+      - vips
+      - vips/status
+      - vlans
+      - vlans/status
+      - provider-networks
+      - provider-networks/status
+      - security-groups
+      - security-groups/status
+      - iptables-eips
+      - iptables-fip-rules
+      - iptables-dnat-rules
+      - iptables-snat-rules
+      - iptables-eips/status
+      - iptables-fip-rules/status
+      - iptables-dnat-rules/status
+      - iptables-snat-rules/status
+      - ovn-eips
+      - ovn-fips
+      - ovn-snat-rules
+      - ovn-eips/status
+      - ovn-fips/status
+      - ovn-snat-rules/status
+      - vpc-dnses
+      - vpc-dnses/status
+      - switch-lb-rules
+      - switch-lb-rules/status
+    verbs:
+      - "*"
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - pods/exec
+      - namespaces
+      - nodes
+      - configmaps
+    verbs:
+      - create
+      - get
+      - list
+      - watch
+      - patch
+      - update
+  - apiGroups:
+      - ""
+      - networking.k8s.io
+      - apps
+      - extensions
+    resources:
+      - networkpolicies
+      - services
+      - services/status
+      - endpoints
+      - statefulsets
+      - daemonsets
+      - deployments
+      - deployments/scale
+    verbs:
+      - create
+      - delete
+      - update
+      - patch
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+      - update
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - "*"
+  - apiGroups:
+      - "k8s.cni.cncf.io"
+    resources:
+      - network-attachment-definitions
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - update
+  - apiGroups:
+      - "kubevirt.io"
+    resources:
+      - virtualmachines
+      - virtualmachineinstances
+    verbs:
+      - get
+      - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ovn
+roleRef:
+  name: system:ovn
+  kind: ClusterRole
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: ovn
+    namespace: kube-system
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: ovn-nb
+  namespace: kube-system
+spec:
+  ports:
+    - name: ovn-nb
+      protocol: TCP
+      port: 6641
+      targetPort: 6641
+  type: ClusterIP
+  ${SVC_YAML_IPFAMILYPOLICY}
+  selector:
+    app: ovn-central
+    ovn-nb-leader: "true"
+  sessionAffinity: None
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: ovn-sb
+  namespace: kube-system
+spec:
+  ports:
+    - name: ovn-sb
+      protocol: TCP
+      port: 6642
+      targetPort: 6642
+  type: ClusterIP
+  ${SVC_YAML_IPFAMILYPOLICY}
+  selector:
+    app: ovn-central
+    ovn-sb-leader: "true"
+  sessionAffinity: None
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: ovn-northd
+  namespace: kube-system
+spec:
+  ports:
+    - name: ovn-northd
+      protocol: TCP
+      port: 6643
+      targetPort: 6643
+  type: ClusterIP
+  ${SVC_YAML_IPFAMILYPOLICY}
+  selector:
+    app: ovn-central
+    ovn-northd-leader: "true"
+  sessionAffinity: None
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: ovn-central
+  namespace: kube-system
+  annotations:
+    kubernetes.io/description: |
+      OVN components: northd, nb and sb.
+spec:
+  replicas: $count
+  strategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: ovn-central
+  template:
+    metadata:
+      labels:
+        app: ovn-central
+        component: network
+        type: infra
+    spec:
+      tolerations:
+        - effect: NoSchedule
+          operator: Exists
+        - effect: NoExecute
+          operator: Exists
+        - key: CriticalAddonsOnly
+          operator: Exists
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: ovn-central
+              topologyKey: kubernetes.io/hostname
+      priorityClassName: system-cluster-critical
+      serviceAccountName: ovn
+      hostNetwork: true
+      containers:
+        - name: ovn-central
+          image: "$REGISTRY/kube-ovn:$VERSION"
+          imagePullPolicy: $IMAGE_PULL_POLICY
+          command: ["/kube-ovn/start-db.sh"]
+          securityContext:
+            capabilities:
+              add: ["SYS_NICE"]
+          env:
+            - name: ENABLE_SSL
+              value: "$ENABLE_SSL"
+            - name: NODE_IPS
+              value: $addresses
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_IPS
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIPs
+            - name: ENABLE_BIND_LOCAL_IP
+              value: "$ENABLE_BIND_LOCAL_IP"
+            - name: DEBUG_WRAPPER
+              value: "$DEBUG_WRAPPER"
+          resources:
+            requests:
+              cpu: 300m
+              memory: 200Mi
+            limits:
+              cpu: 3
+              memory: 4Gi
+          volumeMounts:
+            - mountPath: /var/run/openvswitch
+              name: host-run-ovs
+            - mountPath: /var/run/ovn
+              name: host-run-ovn
+            - mountPath: /sys
+              name: host-sys
+              readOnly: true
+            - mountPath: /etc/openvswitch
+              name: host-config-openvswitch
+            - mountPath: /etc/ovn
+              name: host-config-ovn
+            - mountPath: /var/log/openvswitch
+              name: host-log-ovs
+            - mountPath: /var/log/ovn
+              name: host-log-ovn
+            - mountPath: /etc/localtime
+              name: localtime
+            - mountPath: /var/run/tls
+              name: kube-ovn-tls
+          readinessProbe:
+            exec:
+              command:
+                - bash
+                - /kube-ovn/ovn-healthcheck.sh
+            periodSeconds: 15
+            timeoutSeconds: 45
+          livenessProbe:
+            exec:
+              command:
+                - bash
+                - /kube-ovn/ovn-healthcheck.sh
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 5
+            timeoutSeconds: 45
+      nodeSelector:
+        kubernetes.io/os: "linux"
+        kube-ovn/role: "master"
+      volumes:
+        - name: host-run-ovs
+          hostPath:
+            path: /run/openvswitch
+        - name: host-run-ovn
+          hostPath:
+            path: /run/ovn
+        - name: host-sys
+          hostPath:
+            path: /sys
+        - name: host-config-openvswitch
+          hostPath:
+            path: /etc/origin/openvswitch
+        - name: host-config-ovn
+          hostPath:
+            path: /etc/origin/ovn
+        - name: host-log-ovs
+          hostPath:
+            path: /var/log/openvswitch
+        - name: host-log-ovn
+          hostPath:
+            path: /var/log/ovn
+        - name: localtime
+          hostPath:
+            path: /etc/localtime
+        - name: kube-ovn-tls
+          secret:
+            optional: true
+            secretName: kube-ovn-tls
 ---
 kind: DaemonSet
 apiVersion: apps/v1
@@ -3739,10 +2617,7 @@ spec:
     matchLabels:
       app: ovs
   updateStrategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 100%
-      maxUnavailable: 0
+    type: OnDelete
   template:
     metadata:
       labels:
@@ -3758,7 +2633,7 @@ spec:
         - key: CriticalAddonsOnly
           operator: Exists
       priorityClassName: system-node-critical
-      serviceAccountName: ovn-ovs
+      serviceAccountName: ovn
       hostNetwork: true
       hostPID: true
       containers:
@@ -3776,14 +2651,6 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.podIP
-            - name: POD_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
-            - name: POD_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
             - name: HW_OFFLOAD
               value: "$HW_OFFLOAD"
             - name: TUNNEL_TYPE
@@ -3810,6 +2677,8 @@ spec:
             - mountPath: /sys
               name: host-sys
               readOnly: true
+            - mountPath: /etc/cni/net.d
+              name: cni-conf
             - mountPath: /etc/openvswitch
               name: host-config-openvswitch
             - mountPath: /etc/ovn
@@ -3820,19 +2689,16 @@ spec:
               name: host-log-ovn
             - mountPath: /etc/localtime
               name: localtime
-              readOnly: true
             - mountPath: /var/run/tls
               name: kube-ovn-tls
             - mountPath: /var/run/containerd
               name: cruntime
-              readOnly: true
           readinessProbe:
             exec:
               command:
                 - bash
                 - -c
                 - LOG_ROTATE=true /kube-ovn/ovs-healthcheck.sh
-            initialDelaySeconds: 10
             periodSeconds: 5
             timeoutSeconds: 45
           livenessProbe:
@@ -3869,6 +2735,9 @@ spec:
         - name: host-ns
           hostPath:
             path: /var/run/netns
+        - name: cni-conf
+          hostPath:
+            path: /etc/cni/net.d
         - name: host-config-openvswitch
           hostPath:
             path: /etc/origin/openvswitch
@@ -3894,7 +2763,8 @@ spec:
 EOF
 fi
 
-kubectl apply -f ovs-ovn-ds.yaml
+kubectl apply -f kube-ovn-crd.yaml
+kubectl apply -f ovn.yaml
 
 if $HYBRID_DPDK; then
 
@@ -3923,7 +2793,7 @@ spec:
       tolerations:
       - operator: Exists
       priorityClassName: system-node-critical
-      serviceAccountName: ovn-ovs
+      serviceAccountName: ovn
       hostNetwork: true
       hostPID: true
       containers:
@@ -3957,7 +2827,7 @@ spec:
             - mountPath: /opt/ovs-config
               name: host-config-ovs
             - name: shareddir
-              mountPath: $KUBELET_DIR/pods
+              mountPath: /var/lib/kubelet/pods
             - name: hugepage
               mountPath: /dev/hugepages
             - mountPath: /lib/modules
@@ -3970,6 +2840,8 @@ spec:
               name: host-run-ovn
             - mountPath: /sys
               name: host-sys
+            - mountPath: /etc/cni/net.d
+              name: cni-conf
             - mountPath: /etc/openvswitch
               name: host-config-openvswitch
             - mountPath: /etc/ovn
@@ -3980,7 +2852,6 @@ spec:
               name: host-log-ovn
             - mountPath: /etc/localtime
               name: localtime
-              readOnly: true
             - mountPath: /var/run/tls
               name: kube-ovn-tls
           readinessProbe:
@@ -4036,6 +2907,9 @@ spec:
         - name: host-sys
           hostPath:
             path: /sys
+        - name: cni-conf
+          hostPath:
+            path: /etc/cni/net.d
         - name: host-config-openvswitch
           hostPath:
             path: /etc/origin/openvswitch
@@ -4059,32 +2933,12 @@ EOF
 kubectl apply -f ovn-dpdk.yaml
 fi
 kubectl rollout status deployment/ovn-central -n kube-system --timeout 300s
-kubectl rollout status daemonset/ovs-ovn -n kube-system --timeout 120s
 echo "-------------------------------"
 echo ""
 
 echo "[Step 3/6] Install Kube-OVN"
 
 cat <<EOF > kube-ovn.yaml
----
-kind: ConfigMap
-apiVersion: v1
-metadata:
-  name: ovn-vpc-nat-config
-  namespace: kube-system
-  annotations:
-    kubernetes.io/description: |
-      kube-ovn vpc-nat common config
-data:
-  image: $REGISTRY/$VPC_NAT_IMAGE:$VERSION
----
-kind: ConfigMap
-apiVersion: v1
-metadata:
-  name: ovn-vpc-nat-gw-config
-  namespace: kube-system
-data:
-  enable-vpc-nat-gw: "$ENABLE_NAT_GW"
 ---
 kind: Deployment
 apiVersion: apps/v1
@@ -4159,7 +3013,6 @@ spec:
           - --enable-lb-svc=$ENABLE_LB_SVC
           - --keep-vm-ip=$ENABLE_KEEP_VM_IP
           - --pod-default-fip-type=$POD_DEFAULT_FIP_TYPE
-          - --node-local-dns-ip=$NODE_LOCAL_DNS_IP
           env:
             - name: ENABLE_SSL
               value: "$ENABLE_SSL"
@@ -4186,7 +3039,6 @@ spec:
           volumeMounts:
             - mountPath: /etc/localtime
               name: localtime
-              readOnly: true
             - mountPath: /var/log/kube-ovn
               name: kube-ovn-log
             - mountPath: /var/run/tls
@@ -4254,7 +3106,7 @@ spec:
         - key: CriticalAddonsOnly
           operator: Exists
       priorityClassName: system-node-critical
-      serviceAccountName: kube-ovn-cni
+      serviceAccountName: ovn
       hostNetwork: true
       hostPID: true
       initContainers:
@@ -4279,7 +3131,6 @@ spec:
           - /kube-ovn/start-cniserver.sh
         args:
           - --enable-mirror=$ENABLE_MIRROR
-          - --enable-arp-detect-ip-conflict=$ENABLE_ARP_DETECT_IP_CONFLICT
           - --encap-checksum=true
           - --service-cluster-ip-range=$SVC_CIDR
           - --iface=${IFACE}
@@ -4291,7 +3142,6 @@ spec:
           - --alsologtostderr=true
           - --log_file=/var/log/kube-ovn/kube-ovn-cni.log
           - --log_file_max_size=0
-          - --kubelet-dir=$KUBELET_DIR
         securityContext:
           runAsUser: 0
           privileged: true
@@ -4323,10 +3173,9 @@ spec:
             mountPath: /lib/modules
             readOnly: true
           - name: shared-dir
-            mountPath: $KUBELET_DIR/pods
+            mountPath: /var/lib/kubelet/pods
           - mountPath: /etc/openvswitch
             name: systemid
-            readOnly: true
           - mountPath: /etc/cni/net.d
             name: cni-conf
           - mountPath: /run/openvswitch
@@ -4339,7 +3188,7 @@ spec:
             mountPropagation: HostToContainer
           - mountPath: /var/run/netns
             name: host-ns
-            mountPropagation: Bidirectional
+            mountPropagation: HostToContainer
           - mountPath: /var/log/kube-ovn
             name: kube-ovn-log
           - mountPath: /var/log/openvswitch
@@ -4348,7 +3197,6 @@ spec:
             name: host-log-ovn
           - mountPath: /etc/localtime
             name: localtime
-            readOnly: true
           - mountPath: /tmp
             name: tmp
         livenessProbe:
@@ -4361,6 +3209,7 @@ spec:
           timeoutSeconds: 3
         readinessProbe:
           failureThreshold: 3
+          initialDelaySeconds: 30
           periodSeconds: 7
           successThreshold: 1
           tcpSocket:
@@ -4430,7 +3279,7 @@ metadata:
   namespace: kube-system
   annotations:
     kubernetes.io/description: |
-      This daemon set launches the pinger daemon.
+      This daemon set launches the openvswitch daemon.
 spec:
   selector:
     matchLabels:
@@ -4445,7 +3294,7 @@ spec:
         type: infra
     spec:
       priorityClassName: system-node-critical
-      serviceAccountName: kube-ovn-app
+      serviceAccountName: ovn
       hostPID: true
       containers:
         - name: pinger
@@ -4483,23 +3332,28 @@ spec:
                 fieldRef:
                   fieldPath: spec.nodeName
           volumeMounts:
+            - mountPath: /lib/modules
+              name: host-modules
+              readOnly: true
+            - mountPath: /run/openvswitch
+              name: host-run-ovs
             - mountPath: /var/run/openvswitch
               name: host-run-ovs
             - mountPath: /var/run/ovn
               name: host-run-ovn
+            - mountPath: /sys
+              name: host-sys
+              readOnly: true
             - mountPath: /etc/openvswitch
               name: host-config-openvswitch
             - mountPath: /var/log/openvswitch
               name: host-log-ovs
-              readOnly: true
             - mountPath: /var/log/ovn
               name: host-log-ovn
-              readOnly: true
             - mountPath: /var/log/kube-ovn
               name: kube-ovn-log
             - mountPath: /etc/localtime
               name: localtime
-              readOnly: true
             - mountPath: /var/run/tls
               name: kube-ovn-tls
           resources:
@@ -4512,12 +3366,18 @@ spec:
       nodeSelector:
         kubernetes.io/os: "linux"
       volumes:
+        - name: host-modules
+          hostPath:
+            path: /lib/modules
         - name: host-run-ovs
           hostPath:
             path: /run/openvswitch
         - name: host-run-ovn
           hostPath:
             path: /run/ovn
+        - name: host-sys
+          hostPath:
+            path: /sys
         - name: host-config-openvswitch
           hostPath:
             path: /etc/origin/openvswitch
@@ -4576,18 +3436,13 @@ spec:
                   app: kube-ovn-monitor
               topologyKey: kubernetes.io/hostname
       priorityClassName: system-cluster-critical
-      serviceAccountName: kube-ovn-app
+      serviceAccountName: ovn
       hostNetwork: true
       containers:
         - name: kube-ovn-monitor
           image: "$REGISTRY/kube-ovn:$VERSION"
           imagePullPolicy: $IMAGE_PULL_POLICY
           command: ["/kube-ovn/start-ovn-monitor.sh"]
-          args:
-          - --log_file=/var/log/kube-ovn/kube-ovn-monitor.log
-          - --logtostderr=false
-          - --alsologtostderr=true
-          - --log_file_max_size=0
           securityContext:
             runAsUser: 0
             privileged: false
@@ -4620,16 +3475,14 @@ spec:
               name: host-config-openvswitch
             - mountPath: /etc/ovn
               name: host-config-ovn
+            - mountPath: /var/log/openvswitch
+              name: host-log-ovs
             - mountPath: /var/log/ovn
               name: host-log-ovn
-              readOnly: true
             - mountPath: /etc/localtime
               name: localtime
-              readOnly: true
             - mountPath: /var/run/tls
               name: kube-ovn-tls
-            - mountPath: /var/log/kube-ovn
-              name: kube-ovn-log
           readinessProbe:
             exec:
               command:
@@ -4662,6 +3515,9 @@ spec:
         - name: host-config-ovn
           hostPath:
             path: /etc/origin/ovn
+        - name: host-log-ovs
+          hostPath:
+            path: /var/log/openvswitch
         - name: host-log-ovn
           hostPath:
             path: /var/log/ovn
@@ -4672,9 +3528,6 @@ spec:
           secret:
             optional: true
             secretName: kube-ovn-tls
-        - name: kube-ovn-log
-          hostPath:
-            path: /var/log/kube-ovn
 ---
 kind: Service
 apiVersion: v1
@@ -4748,10 +3601,11 @@ echo ""
 echo "[Step 4/6] Delete pod that not in host network mode"
 for ns in $(kubectl get ns --no-headers -o custom-columns=NAME:.metadata.name); do
   for pod in $(kubectl get pod --no-headers -n "$ns" --field-selector spec.restartPolicy=Always -o custom-columns=NAME:.metadata.name,HOST:spec.hostNetwork | awk '{if ($2!="true") print $1}'); do
-    kubectl delete pod "$pod" -n "$ns" --ignore-not-found --wait=false
+    kubectl delete pod "$pod" -n "$ns" --ignore-not-found
   done
 done
 
+sleep 5
 kubectl rollout status daemonset/kube-ovn-pinger -n kube-system --timeout 300s
 kubectl rollout status deployment/coredns -n kube-system --timeout 600s
 echo "-------------------------------"
@@ -4804,3 +3658,14 @@ echo "
 echo "Thanks for choosing Kube-OVN!
 For more advanced features, please read https://kubeovn.github.io/docs/stable/en/
 If you have any question, please file an issue https://github.com/kubeovn/kube-ovn/issues/new/choose"
+
+
+
+
+
+
+
+
+
+
+

@@ -1,2 +1,0 @@
-# kube-ovn
-kube-ovn
